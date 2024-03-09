@@ -4,6 +4,9 @@
  * Author: Felix Zeng <felix.zeng@rock-chips.com> 
  */
 
+#ifndef RKNPU_IOCTL_H
+#define RKNPU_IOCTL_H
+
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
@@ -318,3 +321,5 @@ struct rknpu_action {
 #define IOCTL_RKNPU_MEM_DESTROY                                                \
         RKNPU_IOWR(RKNPU_MEM_DESTROY, struct rknpu_mem_destroy)
 #define IOCTL_RKNPU_MEM_SYNC RKNPU_IOWR(RKNPU_MEM_SYNC, struct rknpu_mem_sync)
+
+#endif // RKNPU_IOCTL_H
