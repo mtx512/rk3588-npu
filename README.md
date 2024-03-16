@@ -9,8 +9,7 @@ cd build
 ninja
 ```
 
-To run (tested against 5.10 kernel) :
+To run tests (tested against 5.10 kernel) :
 ```
-cd build
-./matmul_4_36_16
+ninja -C build test
 ```
