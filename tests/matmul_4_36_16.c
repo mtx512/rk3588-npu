@@ -46,7 +46,7 @@
     };
 
   // matrix B (16 X 36)
-  float  matrixB[] = {
+  float matrixB[] = {
     9.0f, 7.0f, 1.0f, 3.0f, 5.0f, 9.0f, 7.0f, 6.0f, 1.0f, 10.0f, 1.0f, 1.0f, 7.0f, 2.0f, 4.0f, 9.0f, 10.0f, 4.0f, 5.0f, 5.0f, 7.0f, 1.0f, 7.0f, 7.0f, 2.0f, 9.0f, 5.0f, 10.0f, 7.0f, 4.0f, 8.0f, 9.0f, 9.0f, 3.0f, 10.0f, 2.0f,
     4.0f, 6.0f, 10.0f, 9.0f, 5.0f, 1.0f, 8.0f, 7.0f, 4.0f, 7.0f, 2.0f, 6.0f, 5.0f, 3.0f, 1.0f, 10.0f, 8.0f, 4.0f, 8.0f, 3.0f, 7.0f, 1.0f, 2.0f, 7.0f, 6.0f, 8.0f, 6.0f, 5.0f, 2.0f, 3.0f, 1.0f, 1.0f, 2.0f, 5.0f, 7.0f, 1.0f,
     8.0f, 2.0f, 8.0f, 8.0f, 8.0f, 8.0f, 4.0f, 4.0f, 6.0f, 10.0f, 10.0f, 9.0f, 2.0f, 9.0f, 3.0f, 7.0f, 7.0f, 1.0f, 4.0f, 9.0f, 1.0f, 2.0f, 3.0f, 6.0f, 1.0f, 10.0f, 5.0f, 8.0f, 9.0f, 4.0f, 6.0f, 2.0f, 3.0f, 1.0f, 2.0f, 7.0f,
@@ -75,44 +75,11 @@
 
   uint64_t npu_regs[112];
 
-int feature_data(int C, int H, int W, int C2, int c, int h, int w) {
-
-  int plane = (c-1)/C2;
-  int src = plane * H * W * C2;
-  int offset = (c-1) % C2;
-  int pos = src + C2 * ((h-1) * W + (w-1)) + offset;
-  return pos;
-}
-
-
-int weight_data(int K, int C, int k, int c) {
-
-  // fp16 format
-
-  int cpg=32;  
-  int kgs = (C/cpg)+1;  
-  int gi = ((c-1)/cpg)+1;
-  int C2_gs = ((C-1)/8)+1;
-  int c2_gs = ((c-1)/8)+1;
-  int c1_gs = ((c2_gs-1)/4);
-  int dst = c1_gs * 32 * K;
-  int rgs = (C2_gs)-(c1_gs*4);
-  int r=(c-1)%cpg;
-  if (gi == kgs) {
-    dst = dst + (rgs*8*(k-1));
-  } else {
-    dst = dst + (cpg*(k-1));
-  }
-  dst = dst + r;
-  return dst;
-}
-
 int main(int argc, char **argv) {
 
   int M=4;
   int K=36;
   int N=16;
-
   int ret=0;
 
   // Open DRI called "rknpu"
@@ -147,32 +114,32 @@ int main(int argc, char **argv) {
   // Reset the NPU
   npu_reset(fd);
 
-  ret = gen_matmul_fp16(M,40,N,input_dma,weights_dma,output_dma,(uint64_t *)&npu_regs);
+  ret = gen_matmul_fp16(M,64,N,input_dma,weights_dma,output_dma,(uint64_t *)&npu_regs);
   if (ret !=0) {
     printf("gen_matmul_fp16 failed %d\n",ret);
     goto cleanup;
   }
 
-  memcpy(regcmd,npu_regs,sizeof(npu_regs));
+  memcpy((void *)regcmd,(void *)&npu_regs,sizeof(npu_regs));
+
+  memset((void *)input,0,M*64*sizeof(__fp16));
+  memset((void *)weights,0,64*N*sizeof(__fp16));
+  memset((void *)output,0,M*N*sizeof(float));
 
   tasks[0].flags  = 0;
   tasks[0].op_idx = 1;
   tasks[0].enable_mask = 0x7f;
   tasks[0].int_mask = 0x300; // wait for DPU to finish
   tasks[0].int_clear = 0x1ffff;
-  tasks[0].regcfg_amount = sizeof(npu_regs)/sizeof(uint64_t); //nInstrs - 1;
+  tasks[0].regcfg_amount = (sizeof(npu_regs)/sizeof(uint64_t));
   tasks[0].regcfg_offset = 0;
   tasks[0].regcmd_addr = regcmd_dma;
 
-  memset((void *)input,0,M*K*sizeof(__fp16));
-  memset((void *)weights,0,K*N*sizeof(__fp16));
-  memset((void *)output,0,M*N*sizeof(float));
-
   __fp16 *weights_fp16 = weights;
-   
+
   for(int n=1;n<=N;n++) {
     for(int k=1;k<=K;k++) {
-      weights_fp16[weight_data(N,40,n,k)]= matrixB[((n-1)*K)+(k-1)];
+      weights_fp16[weight_fp16(64,n,k)]= matrixB[((n-1)*K)+(k-1)];
     }
   }
 
@@ -180,12 +147,18 @@ int main(int argc, char **argv) {
 
   for (int m=1;m<=M;m++) {
     for (int k=1;k<=K;k++) {
-      feature_data_fp16[feature_data(40,4,1,8,k,m,1)]= matrixA[((m-1)*K)+(k-1)];
+      feature_data_fp16[feature_data(64,4,1,8,k,m,1)]= matrixA[((m-1)*K)+(k-1)];
     }
   }
 
-  munmap(input,4096);
-  munmap(weights,4096);
+  tasks[0].flags  = 0;
+  tasks[0].op_idx = 1;
+  tasks[0].enable_mask = 0x7f;
+  tasks[0].int_mask = 0x300; // wait for DPU to finish
+  tasks[0].int_clear = 0x1ffff;
+  tasks[0].regcfg_amount = (sizeof(npu_regs)/sizeof(uint64_t));
+  tasks[0].regcfg_offset = 0;
+  tasks[0].regcmd_addr = regcmd_dma;
 
   struct rknpu_submit submit = {
     .flags = RKNPU_JOB_PC | RKNPU_JOB_BLOCK | RKNPU_JOB_PINGPONG,
@@ -229,13 +202,13 @@ int main(int argc, char **argv) {
   }
   printf("=========================================================================================================\n");
 
+cleanup:
   munmap(regcmd,1024);
   munmap(tasks,1024);
   munmap(input,4096);
   munmap(weights,4096);
   munmap(output,4096);
 
-cleanup:
   mem_destroy(fd, regcmd_handle, regcmd_obj);
   mem_destroy(fd, tasks_handle, tasks_obj );
   mem_destroy(fd, input_handle, input_obj);

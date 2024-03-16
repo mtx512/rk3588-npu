@@ -50,6 +50,7 @@ void* mem_allocate(int fd, size_t size, uint64_t *dma_addr, uint64_t *obj, uint3
     printf("RKNPU_MEM_MAP failed %d\n",ret);
     return NULL;
   }
+
   void *map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, mem_map.offset);
 
   *dma_addr = mem_create.dma_addr;

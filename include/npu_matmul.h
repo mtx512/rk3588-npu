@@ -25,5 +25,7 @@
 #include "npu_dpu.h"
 
 int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task);
+int feature_data(int C, int H, int W, int C2, int c, int h, int w);
+int weight_fp16(int C, int k, int c);
 
 #endif // NPU_MATMUL_H

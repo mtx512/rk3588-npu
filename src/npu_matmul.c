@@ -31,16 +31,15 @@
  * Were only using cna & core, dpu outputs to memory
  *
  */
-int gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_desc, npu_dpu_desc *dpu_desc) {
+void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_desc, npu_dpu_desc *dpu_desc) {
 
   uint32_t value;
-  int ret =0;
 
   ops[0] = NPUOP(OP_REG_DPU, 0xE, DPU_S_POINTER);
   value = ((cna_desc->proc_precision & 0x7) <<7) |  ((cna_desc->in_precision & 0x7)<<4) | 
     (cna_desc->conv_mode & 0xf);
   ops[1] = NPUOP(OP_REG_CNA, value, CNA_CONV_CON1);
-  value = ((cna_desc->feature_grains & 0x3FF) << 4);
+  value = ((cna_desc->kernel_groups & 0xFF) << 16) | ((cna_desc->feature_grains & 0x3FF) << 4);
   ops[2] = NPUOP(OP_REG_CNA, value, CNA_CONV_CON2);
   value = ((cna_desc->conv_y_stride & 0x7) << 3) | (cna_desc->conv_x_stride & 0x7);
   ops[3] = NPUOP(OP_REG_CNA, value, CNA_CONV_CON3);
@@ -63,7 +62,7 @@ int gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_d
   ops[11] = NPUOP(OP_REG_CNA, value, CNA_CBUF_CON0);
   value = cna_desc->data_entries & 0x1FFF;
   ops[12] = NPUOP(OP_REG_CNA, value, CNA_CBUF_CON1);
-  value = ((cna_desc->data_sign & 0x1) << 3) | (cna_desc->cvt_bypass);
+  value = ((cna_desc->data_sign & 0x1) << 3) | (0x1 << 2) | (cna_desc->cvt_bypass);
   ops[13] = NPUOP(OP_REG_CNA, value, CNA_CVT_CON0);
   value = ((cna_desc->cvt_scale0 & 0xFFFF) << 16) | 0x0;
   ops[14] = NPUOP(OP_REG_CNA, value, CNA_CVT_CON1);
@@ -163,10 +162,10 @@ int gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_d
     (dpu_desc->ew_bypass & 0x1);
   ops[75] = NPUOP(OP_REG_DPU, value, DPU_EW_CFG);
   ops[76] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_CVT_OFFSET_VALUE);
-  ops[77] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_CVT_SCALE_VALUE);
+  ops[77] = NPUOP(OP_REG_DPU, 0x1, DPU_EW_CVT_SCALE_VALUE);
   ops[78] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_RELUX_CMP_VALUE);
   ops[79] = NPUOP(OP_REG_DPU, 0x0, DPU_OUT_CVT_OFFSET);
-  ops[80] = NPUOP(OP_REG_DPU, 0x0, DPU_OUT_CVT_SCALE);
+  ops[80] = NPUOP(OP_REG_DPU, 0x1, DPU_OUT_CVT_SCALE);
   ops[81] = NPUOP(OP_REG_DPU, 0x0, DPU_OUT_CVT_SHIFT);
   ops[82] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_OP_VALUE_0);
   ops[83] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_OP_VALUE_1);
@@ -177,7 +176,7 @@ int gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_d
   ops[88] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_OP_VALUE_6);
   ops[89] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_OP_VALUE_7);
   value = ((dpu_desc->surf_add & 0xFFFFFFF) << 4);
-  ops[90] = NPUOP(OP_REG_DPU, 0x0, DPU_SURFACE_ADD);
+  ops[90] = NPUOP(OP_REG_DPU, value, DPU_SURFACE_ADD);
   ops[91] = NPUOP(OP_REG_DPU, 0x0, DPU_40C4);
   ops[92] = NPUOP(OP_REG_DPU, 0x0, DPU_LUT_ACCESS_CFG);
   ops[93] = NPUOP(OP_REG_DPU, 0x0, DPU_LUT_ACCESS_DATA);
@@ -191,12 +190,10 @@ int gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_d
   ops[101] = NPUOP(OP_REG_DPU, 0x0, DPU_LUT_LE_SLOPE_SHIFT);
   ops[102] = NPUOP(OP_REG_DPU, 0x0, DPU_LUT_LO_SLOPE_SCALE);
   ops[103] = NPUOP(OP_REG_DPU, 0x0, DPU_LUT_LO_SLOPE_SHIFT);
-  ops[104] = NPUOP(OP_REG_PC, 0x0, 0x0);
+  ops[104] = NPUOP(OP_NONE, 0x0, 0x0);
   ops[105] = NPUOP(OP_REG_PC, 0x0, PC_REGISTER_AMOUNTS);
   ops[106] = NPUOP(OP_40, 0x0, 0x0);
   ops[107] = NPUOP(OP_ENABLE, (PC_ENABLE_DPU | PC_ENABLE_CNA | PC_ENABLE), PC_OPERATION_ENABLE);
- 
-  return ret;
 }
 
 /* 
@@ -223,7 +220,8 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.in_precision = precision_float16;
    cna_desc.proc_precision = precision_float16;
 
-   cna_desc.feature_grains = 1;
+   cna_desc.kernel_groups = 0;
+   cna_desc.feature_grains = M+1;
    cna_desc.conv_x_stride = 1;
    cna_desc.conv_y_stride = 1;
 
@@ -246,19 +244,22 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    fd_banks = ((fd_bytes % NPU_CBUF_BANK_SIZE) == 0) ? fd_banks : fd_banks +1;
    weight_banks = (cna_desc.weight_bytes / NPU_CBUF_BANK_SIZE);
    weight_banks = ((cna_desc.weight_bytes % NPU_CBUF_BANK_SIZE)==0) ? weight_banks : weight_banks + 1;
-   if ((fd_banks + weight_banks) > NPU_CBUF_BANKS) {
+   if ((fd_banks) > NPU_CBUF_BANKS-1) {
      return -1;
    } else {
-     if (fd_banks + weight_banks < NPU_CBUF_BANKS) {
-       weight_banks = NPU_CBUF_BANKS - fd_banks;
-     }
+       if (cna_desc.weight_bytes_per_kernel <= NPU_CBUF_BANK_SIZE) {
+        weight_banks = NPU_CBUF_BANKS - fd_banks;
+       } else {
+         return -2;
+       }
    }
+
    cna_desc.weight_bank = weight_banks;
    cna_desc.data_bank = fd_banks;
    cna_desc.data_entries = (cna_desc.datain_width * cna_desc.datain_channel) / 32;
    cna_desc.data_entries = (((cna_desc.datain_width * cna_desc.datain_channel) % 32) == 0) ? 
      cna_desc.data_entries : cna_desc.data_entries +1;
-   cna_desc.data_sign = 0x0;
+   cna_desc.data_sign = 0x1;
    cna_desc.cvt_bypass = 0x1;
    cna_desc.cvt_scale0 = 0x1;
    cna_desc.cvt_scale1 = 0x1;
@@ -293,7 +294,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.flying_mode = 0x0;
    dpu_desc.out_precision = precision_float32;
    dpu_desc.in_precision = precision_float16;
-   dpu_desc.proc_precision = precision_float32;
+   dpu_desc.proc_precision = precision_float16;
    dpu_desc.dst_base_addr = output;
    dpu_desc.dst_surf_stride = cna_desc.dataout_height * cna_desc.dataout_width;
    dpu_desc.width = core_desc.dataout_width ;
@@ -305,12 +306,32 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.bs_relu_bypass = 1;
    dpu_desc.size_e_2 = 3; 
    dpu_desc.size_e_1 = 3; 
-   dpu_desc.size_e_0 = 3; 
+   dpu_desc.size_e_0 = 3;
+   dpu_desc.od_bypass = 1;
    dpu_desc.width_wdma = core_desc.dataout_width;
    dpu_desc.height_wdma = core_desc.dataout_height;
    dpu_desc.channel_wdma = core_desc.dataout_channel;
+   dpu_desc.surf_add = dpu_desc.dst_surf_stride * 4;
 
    gen_matmul_task(task,&cna_desc,&core_desc,&dpu_desc);
 
    return 0;
+}
+
+int feature_data(int C, int H, int W, int C2, int c, int h, int w) {
+
+  int plane = (c-1)/C2;
+  int src = plane * H * W * C2;
+  int offset = (c-1) % C2;
+  int pos = src + C2 * ((h-1) * W + (w-1)) + offset;
+  return pos;
+}
+
+int weight_fp16(int C, int k, int c) {
+  int dst =0;
+  int kpg = ((k-1)/16);
+  int cpg = ((c-1)/32);
+  dst = ((cpg*32)*16)+ (kpg*16*C);
+  dst = dst + ((c-1)%32) + (((k-1)%16)*32);
+  return dst;
 }
