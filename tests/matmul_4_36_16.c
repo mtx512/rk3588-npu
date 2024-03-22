@@ -127,11 +127,12 @@ int main(int argc, char **argv) {
   memset((void *)output,0,M*N*sizeof(float));
 
   tasks[0].flags  = 0;
-  tasks[0].op_idx = 1;
-  tasks[0].enable_mask = 0x7f;
+  tasks[0].op_idx = 0;
+  tasks[0].enable_mask = 0xd;
   tasks[0].int_mask = 0x300; // wait for DPU to finish
   tasks[0].int_clear = 0x1ffff;
-  tasks[0].regcfg_amount = (sizeof(npu_regs)/sizeof(uint64_t));
+  tasks[0].int_status = 0;
+  tasks[0].regcfg_amount = (sizeof(npu_regs)/sizeof(uint64_t))-(RKNPU_PC_DATA_EXTRA_AMOUNT+4);
   tasks[0].regcfg_offset = 0;
   tasks[0].regcmd_addr = regcmd_dma;
 
@@ -151,15 +152,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  tasks[0].flags  = 0;
-  tasks[0].op_idx = 1;
-  tasks[0].enable_mask = 0x7f;
-  tasks[0].int_mask = 0x300; // wait for DPU to finish
-  tasks[0].int_clear = 0x1ffff;
-  tasks[0].regcfg_amount = (sizeof(npu_regs)/sizeof(uint64_t));
-  tasks[0].regcfg_offset = 0;
-  tasks[0].regcmd_addr = regcmd_dma;
-
   struct rknpu_submit submit = {
     .flags = RKNPU_JOB_PC | RKNPU_JOB_BLOCK | RKNPU_JOB_PINGPONG,
     .timeout = 6000,
@@ -177,7 +169,7 @@ int main(int argc, char **argv) {
       {
         .task_start = 0,
         .task_number = 1,
-      }, { 1, 0}, {2, 0},
+      }, { 1, 0}, {2, 0}, {0,0}, {0,0}
     },
   };
   ret = ioctl(fd, DRM_IOCTL_RKNPU_SUBMIT, &submit);
