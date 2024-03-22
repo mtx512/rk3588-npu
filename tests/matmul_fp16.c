@@ -142,11 +142,12 @@ int main(int argc, char **argv) {
   memcpy(regcmd,npu_regs,sizeof(npu_regs));
 
   tasks[0].flags  = 0;
-  tasks[0].op_idx = 1;
-  tasks[0].enable_mask = 0x7f;
+  tasks[0].op_idx = 0;
+  tasks[0].enable_mask = 0xd;
   tasks[0].int_mask = 0x300; // wait for DPU to finish
   tasks[0].int_clear = 0x1ffff;
-  tasks[0].regcfg_amount = sizeof(npu_regs)/sizeof(uint64_t); //nInstrs - 1;
+  tasks[0].int_status =0;
+  tasks[0].regcfg_amount = sizeof(npu_regs)/sizeof(uint64_t)-8; 
   tasks[0].regcfg_offset = 0;
   tasks[0].regcmd_addr = regcmd_dma;
 

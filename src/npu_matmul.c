@@ -62,7 +62,7 @@ void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_
   ops[11] = NPUOP(OP_REG_CNA, value, CNA_CBUF_CON0);
   value = cna_desc->data_entries & 0x1FFF;
   ops[12] = NPUOP(OP_REG_CNA, value, CNA_CBUF_CON1);
-  value = ((cna_desc->data_sign & 0x1) << 3) | (0x1 << 2) | (cna_desc->cvt_bypass);
+  value = ((cna_desc->data_sign & 0x1) << 3) | ((cna_desc->cvt_type & 0x1)<< 1) | (cna_desc->cvt_bypass & 0x1);
   ops[13] = NPUOP(OP_REG_CNA, value, CNA_CVT_CON0);
   value = ((cna_desc->cvt_scale0 & 0xFFFF) << 16) | 0x0;
   ops[14] = NPUOP(OP_REG_CNA, value, CNA_CVT_CON1);
@@ -137,7 +137,7 @@ void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_
   ops[61] = NPUOP(OP_REG_DPU, 0x0, DPU_DATA_CUBE_NOTCH_ADDR);
   value = ((dpu_desc->channel & 0x1FFF) << 16) | (dpu_desc->channel & 0x1FFF);
   ops[62] = NPUOP(OP_REG_DPU, value, DPU_DATA_CUBE_CHANNEL);
-  value = ((dpu_desc->bs_relu_bypass & 0x1) << 6) | ((dpu_desc->bs_mul_bypass & 0x1) << 4) | 
+  value = ((dpu_desc->bs_relu_bypass & 0x1) << 6) | ((dpu_desc->bs_mul_bypass & 0x1) << 4) |
     ((dpu_desc->bs_alu_bypass & 0x1) << 1) | (dpu_desc->bs_bypass & 0x1);
   ops[63] = NPUOP(OP_REG_DPU, value, DPU_BS_CFG);
   ops[64] = NPUOP(OP_REG_DPU, 0x0, DPU_BS_ALU_CFG);
@@ -151,14 +151,14 @@ void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_
   ops[69] = NPUOP(OP_REG_DPU, value, DPU_WDMA_SIZE_0);
   value = ((dpu_desc->height_wdma & 0x1FFF) << 16) | (dpu_desc->width_wdma & 0x1FFF);
   ops[70] = NPUOP(OP_REG_DPU, value, DPU_WDMA_SIZE_1);
-  value = ((dpu_desc->  bn_relu_bypass & 0x1) << 6) |((dpu_desc->bn_mul_bypass &0x1) << 4) | 
+  value = ((dpu_desc->bn_relu_bypass & 0x1) << 6) | ((dpu_desc->bn_mul_bypass &0x1) << 4) |
     ((dpu_desc->bn_alu_bypass & 0x1) << 1) | (dpu_desc->bn_bypass & 0x1);
   ops[71] = NPUOP(OP_REG_DPU, value, DPU_BN_CFG);
   ops[72] = NPUOP(OP_REG_DPU, 0x0, DPU_BN_ALU_CFG);
   ops[73] = NPUOP(OP_REG_DPU, 0x0, DPU_BN_MUL_CFG);
   ops[74] = NPUOP(OP_REG_DPU, 0x0,DPU_BN_RELUX_CMP_VALUE);
-  value = ((dpu_desc->ew_relu_bypass & 0x1) << 9) | ((dpu_desc->ew_op_cvt_bypass & 0x1) << 8) | 
-    ((dpu_desc->ew_lut_bypass & 0x1) <<7) | ((dpu_desc->ew_op_bypass & 0x1) << 1) | 
+  value = ((dpu_desc->ew_relu_bypass & 0x1) << 9) | ((dpu_desc->ew_op_cvt_bypass & 0x1) << 8) |
+    ((dpu_desc->ew_lut_bypass & 0x1) <<7) | ((dpu_desc->ew_op_bypass & 0x1) << 1) |
     (dpu_desc->ew_bypass & 0x1);
   ops[75] = NPUOP(OP_REG_DPU, value, DPU_EW_CFG);
   ops[76] = NPUOP(OP_REG_DPU, 0x0, DPU_EW_CVT_OFFSET_VALUE);
@@ -260,6 +260,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.data_entries = (((cna_desc.datain_width * cna_desc.datain_channel) % 32) == 0) ? 
      cna_desc.data_entries : cna_desc.data_entries +1;
    cna_desc.data_sign = 0x1;
+   cna_desc.cvt_type  = 0x1;
    cna_desc.cvt_bypass = 0x1;
    cna_desc.cvt_scale0 = 0x1;
    cna_desc.cvt_scale1 = 0x1;
@@ -304,6 +305,15 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.bs_alu_bypass = 1;
    dpu_desc.bs_mul_bypass = 1;
    dpu_desc.bs_relu_bypass = 1;
+   dpu_desc.bn_bypass =1;
+   dpu_desc.bn_alu_bypass = 1;
+   dpu_desc.bn_mul_bypass = 1;
+   dpu_desc.bn_relu_bypass = 1;
+   dpu_desc.ew_bypass =1;
+   dpu_desc.ew_op_bypass =1;
+   dpu_desc.ew_lut_bypass =1;
+   dpu_desc.ew_op_cvt_bypass =1;
+   dpu_desc.ew_relu_bypass=1;
    dpu_desc.size_e_2 = 3; 
    dpu_desc.size_e_1 = 3; 
    dpu_desc.size_e_0 = 3;

@@ -46,6 +46,7 @@ typedef struct npu_cna_desc {
   uint8_t data_bank;          // 0x1040
   uint16_t data_entries;      // 0x1044
   uint8_t data_sign;          // 0x104c
+  uint8_t cvt_type;           // 0x104c
   uint8_t cvt_bypass;         // 0x104c
   uint16_t cvt_scale0;        // 0x1050
   uint16_t cvt_scale1;        // 0x1054
