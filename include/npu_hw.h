@@ -171,6 +171,9 @@
 #define NPU_CBUF_BANKS 12
 
 enum  { direct_convolution = 0}; 
-enum  { precision_float16 = 2, precision_float32 = 5}; 
+enum  { precision_int8 = 0,
+        precision_float16 = 2,
+        precision_int32 = 4,
+        precision_float32 = 5};
 
 #endif //NPU_HW_H

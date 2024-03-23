@@ -196,15 +196,15 @@ void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_
   ops[107] = NPUOP(OP_ENABLE, (PC_ENABLE_DPU | PC_ENABLE_CNA | PC_ENABLE), PC_OPERATION_ENABLE);
 }
 
-/* 
- * Simpify version of matrix mutliplication because :
+/*
+ * Simplified version of matrix mutliplication because :
  * a) we fail if cbuf storage is exceeded ie M,K,N get too large
  * b) because of (a) only generates a single task
  *
  * task memory needs to hold at laest 112 values
  * TODO: Fix a) & b) 
- * 
- * */
+ *
+ **/
 int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task) {
 
    npu_cna_desc cna_desc;
@@ -328,6 +328,138 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    return 0;
 }
 
+/*
+ * Simplified version of matrix mutliplication because :
+ * a) we fail if cbuf storage is exceeded ie M,K,N get too large
+ * b) because of (a) only generates a single task
+ *
+ * task memory needs to hold at laest 112 values
+ * TODO: Fix a) & b)
+ *
+ **/
+int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task) {
+
+   npu_cna_desc cna_desc;
+   npu_core_desc core_desc;
+   npu_dpu_desc dpu_desc;
+
+   unsigned int fd_bytes;
+   unsigned int fd_banks;
+   unsigned int weight_banks;
+   int surf_stride;
+
+   cna_desc.conv_mode = direct_convolution;
+   cna_desc.in_precision = precision_int8;
+   cna_desc.proc_precision = precision_int8;
+
+   cna_desc.kernel_groups = 0;
+   cna_desc.feature_grains = M+1;
+   cna_desc.conv_x_stride = 1;
+   cna_desc.conv_y_stride = 1;
+
+   cna_desc.datain_width = 1;
+   cna_desc.datain_height = M;
+   cna_desc.datain_channel = K;
+   cna_desc.dataout_width = 1;
+   cna_desc.dataout_height = M;
+   cna_desc.dataout_atomics = cna_desc.dataout_width * cna_desc.dataout_height;
+
+   cna_desc.weight_width = 1;
+   cna_desc.weight_height = 1;
+   cna_desc.weight_kernels = N;
+   cna_desc.weight_bytes_per_kernel = cna_desc.weight_width * cna_desc.weight_height *
+     cna_desc.datain_channel * sizeof(int8_t);
+   cna_desc.weight_bytes = cna_desc.weight_bytes_per_kernel * cna_desc.weight_kernels;
+
+   fd_bytes = cna_desc.datain_width * cna_desc.datain_height * cna_desc.datain_channel * sizeof(int8_t);
+   fd_banks = (fd_bytes / NPU_CBUF_BANK_SIZE);
+   fd_banks = ((fd_bytes % NPU_CBUF_BANK_SIZE) == 0) ? fd_banks : fd_banks +1;
+   weight_banks = (cna_desc.weight_bytes / NPU_CBUF_BANK_SIZE);
+   weight_banks = ((cna_desc.weight_bytes % NPU_CBUF_BANK_SIZE)==0) ? weight_banks : weight_banks + 1;
+   if ((fd_banks) > NPU_CBUF_BANKS-1) {
+     return -1;
+   } else {
+       if (cna_desc.weight_bytes_per_kernel <= NPU_CBUF_BANK_SIZE) {
+        weight_banks = NPU_CBUF_BANKS - fd_banks;
+       } else {
+         return -2;
+       }
+   }
+
+   cna_desc.weight_bank = weight_banks;
+   cna_desc.data_bank = fd_banks;
+   cna_desc.data_entries = (cna_desc.datain_width * cna_desc.datain_channel) / 64;
+   cna_desc.data_entries = (((cna_desc.datain_width * cna_desc.datain_channel) % 64) == 0) ?
+     cna_desc.data_entries : cna_desc.data_entries +1;
+   cna_desc.data_sign = 0x1;
+   cna_desc.cvt_type  = 0x1;
+   cna_desc.cvt_bypass = 0x1;
+   cna_desc.cvt_scale0 = 0x1;
+   cna_desc.cvt_scale1 = 0x1;
+   cna_desc.cvt_scale2 = 0x1;
+   cna_desc.cvt_scale3 = 0x1;
+   cna_desc.fc_skip_en = 0;
+   cna_desc.data_offset = 0x0;
+   cna_desc.pad_left = 0;
+   cna_desc.pad_top = 0;
+   cna_desc.feature_base_addr = input;
+   cna_desc.weight_offset = 0;
+   cna_desc.weight_burst_len = 0xf;
+   cna_desc.data_burst_len = 0xf;
+   cna_desc.line_stride = cna_desc.datain_width * 4;
+   surf_stride = cna_desc.line_stride * ((cna_desc.datain_height / 4)-1);
+   surf_stride = surf_stride < 0 ? surf_stride + 1 : surf_stride;
+   cna_desc.surf_stride = surf_stride;
+   cna_desc.dma_width = cna_desc.datain_width;
+   cna_desc.dma_height = cna_desc.datain_height;
+   cna_desc.dma_channel = cna_desc.datain_channel;
+   cna_desc.decompress_addr0 = weights;
+
+   core_desc.proc_precision = precision_int8;
+   core_desc.qd_en = 1;
+   core_desc.dataout_height = cna_desc.dataout_height - 1;
+   core_desc.dataout_width = cna_desc.dataout_width - 1;
+   core_desc.dataout_channel = cna_desc.weight_kernels -1;
+
+   dpu_desc.burst_len = 0xf;
+   dpu_desc.conv_mode = direct_convolution;
+   dpu_desc.output_mode = 0x2;
+   dpu_desc.flying_mode = 0x0;
+   dpu_desc.out_precision = precision_int32;
+   dpu_desc.in_precision = precision_int8;
+   dpu_desc.proc_precision = precision_int8;
+   dpu_desc.dst_base_addr = output;
+   dpu_desc.dst_surf_stride = cna_desc.dataout_height * cna_desc.dataout_width;
+   dpu_desc.width = core_desc.dataout_width ;
+   dpu_desc.height = core_desc.dataout_height;
+   dpu_desc.channel = core_desc.dataout_channel;
+   dpu_desc.bs_bypass = 1;
+   dpu_desc.bs_alu_bypass = 1;
+   dpu_desc.bs_mul_bypass = 1;
+   dpu_desc.bs_relu_bypass = 1;
+   dpu_desc.bn_bypass =1;
+   dpu_desc.bn_alu_bypass = 1;
+   dpu_desc.bn_mul_bypass = 1;
+   dpu_desc.bn_relu_bypass = 1;
+   dpu_desc.ew_bypass =1;
+   dpu_desc.ew_op_bypass =1;
+   dpu_desc.ew_lut_bypass =1;
+   dpu_desc.ew_op_cvt_bypass =1;
+   dpu_desc.ew_relu_bypass=1;
+   dpu_desc.size_e_2 = 7;
+   dpu_desc.size_e_1 = 7;
+   dpu_desc.size_e_0 = 7;
+   dpu_desc.od_bypass = 1;
+   dpu_desc.width_wdma = core_desc.dataout_width;
+   dpu_desc.height_wdma = core_desc.dataout_height;
+   dpu_desc.channel_wdma = core_desc.dataout_channel;
+   dpu_desc.surf_add = dpu_desc.dst_surf_stride * 8;
+
+   gen_matmul_task(task,&cna_desc,&core_desc,&dpu_desc);
+
+   return 0;
+}
+
 int feature_data(int C, int H, int W, int C2, int c, int h, int w) {
 
   int plane = (c-1)/C2;
@@ -343,5 +475,14 @@ int weight_fp16(int C, int k, int c) {
   int cpg = ((c-1)/32);
   dst = ((cpg*32)*16)+ (kpg*16*C);
   dst = dst + ((c-1)%32) + (((k-1)%16)*32);
+  return dst;
+}
+
+int weight_int8(int C, int k, int c) {
+  int dst =0;
+  int kpg = ((k-1)/32);
+  int cpg = ((c-1)/32);
+  dst = ((cpg*32)*32)+ (kpg*32*C);
+  dst = dst + ((c-1)%32) + (((k-1)%32)*32);
   return dst;
 }
