@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
   };
   ret = ioctl(fd, DRM_IOCTL_RKNPU_SUBMIT, &submit);
   printf("RKNPU_SUBMIT returned %d\n", ret);
-  if ((ret <0) && (submit.task_counter == 1)) {
+  if (ret <0)  {
     return ret;
   }
 
@@ -222,7 +222,6 @@ int main(int argc, char **argv) {
         ret = -1;
       }
     }
-    printf("\n");
   }
   if (ret == 0) {
    printf("Multiplication of [%d,%d] x [%d,%d] succesful \n",M,K,N,K);	  
