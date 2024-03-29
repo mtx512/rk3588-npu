@@ -22,4 +22,4 @@ test('matmul int8 1x64x64',test_matmul_int8, is_parallel : false , args : ['1','
 test('matmul int8 1x1024x1024',test_matmul_int8, is_parallel : false , args : ['1','1024','1024'])
 test('matmul int8 1x4096x4096',test_matmul_int8, is_parallel : false , args : ['1','4096','4096'])
 # test max feature data for one task
-test('matmul int8 480x480x4096',test_matmul_int8, is_parallel : false , args : ['480','480','4096'])
+test('matmul int8 544x544x4096',test_matmul_int8, is_parallel : false , args : ['544','544','4096'])

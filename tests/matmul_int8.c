@@ -36,7 +36,7 @@
 #include "npu_interface.h"
 #include "npu_matmul.h"
 
-#define MAX_M 480 
+#define MAX_M 544
 #define MAX_K 4096 
 #define MAX_N 4096 
 
@@ -58,17 +58,15 @@ void matmul_int(int m, int k, int n, int8_t *src0 , int8_t *src1, int32_t* dst) 
     for (int j = 0; j < n; j++) {
       float sum = 0;
       for (int l = 0; l < k; l++) {
-        sum += src0[i*k + l] * src1[j*k + l];
+        sum += (int32_t) (src0[i*k + l] * src1[j*k + l]);
       }
      dst[i*n + j] = sum;
     }
   }
 }
 
-// Pick small values because when K & N are large (4096x4096) there is a mismatch 
-// between cpu and NPU results because of overflow in NPU calculated value.
 int8_t rand_int() {
-  return (int8_t)((rand()%10)+1);
+  return (int8_t)((rand()%255)+1);
 }
 
 int main(int argc, char **argv) {
@@ -162,7 +160,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < M*K; i++) {
     matrixA[i] = rand_int();
   }
-  
+
   for (int i = 0; i < N*K; i++) {
     matrixB[i] = rand_int();
   }
