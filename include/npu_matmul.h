@@ -21,11 +21,20 @@
  *
  */
 
-#include "npu_cna.h"
-#include "npu_dpu.h"
+typedef struct {
+  uint16_t  m;
+  uint16_t  k;
+  uint16_t  n;
 
-int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task);
-int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task);
+  uint32_t  input_dma;
+  uint32_t  weights_dma;
+  uint32_t  output_dma;
+
+  uint64_t  *tasks;
+} matmul_params_t;
+
+int gen_matmul_fp16(matmul_params_t *params);
+int gen_matmul_int8(matmul_params_t *params);
 int feature_data(int C, int H, int W, int C2, int c, int h, int w);
 int weight_fp16(int C, int k, int c);
 int weight_int8(int C, int k, int c);

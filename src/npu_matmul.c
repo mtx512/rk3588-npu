@@ -26,6 +26,8 @@
 #include "npu_hw.h"
 #include "npu_cna.h"
 #include "npu_dpu.h"
+#include "npu_matmul.h"
+
 
 /*
  * Were only using cna & core, dpu outputs to memory
@@ -206,7 +208,7 @@ void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_
  * TODO: Fix a) & b) 
  *
  **/
-int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task) {
+int gen_matmul_fp16(matmul_params_t *params) {
 
    npu_cna_desc cna_desc;
    npu_core_desc core_desc;
@@ -222,20 +224,20 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.proc_precision = precision_float16;
 
    cna_desc.kernel_groups = 0;
-   cna_desc.feature_grains = M+1;
+   cna_desc.feature_grains = params->m+1;
    cna_desc.conv_x_stride = 1;
    cna_desc.conv_y_stride = 1;
 
    cna_desc.datain_width = 1;
-   cna_desc.datain_height = M;
-   cna_desc.datain_channel = K;
+   cna_desc.datain_height = params->m;
+   cna_desc.datain_channel = params->k;
    cna_desc.dataout_width = 1;
-   cna_desc.dataout_height = M;
+   cna_desc.dataout_height = params->m;
    cna_desc.dataout_atomics = cna_desc.dataout_width * cna_desc.dataout_height;
 
    cna_desc.weight_width = 1;
    cna_desc.weight_height = 1;
-   cna_desc.weight_kernels = N;
+   cna_desc.weight_kernels = params->n;
    cna_desc.weight_bytes_per_kernel = cna_desc.weight_width * cna_desc.weight_height * 
      cna_desc.datain_channel * sizeof(__fp16);
    cna_desc.weight_bytes = cna_desc.weight_bytes_per_kernel * cna_desc.weight_kernels; 
@@ -271,7 +273,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.data_offset = 0x0;
    cna_desc.pad_left = 0;
    cna_desc.pad_top = 0;
-   cna_desc.feature_base_addr = input;
+   cna_desc.feature_base_addr = params->input_dma;
    cna_desc.weight_offset = 0;
    cna_desc.weight_burst_len = 0xf;
    cna_desc.data_burst_len = 0xf;
@@ -282,7 +284,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.dma_width = cna_desc.datain_width;
    cna_desc.dma_height = cna_desc.datain_height;
    cna_desc.dma_channel = cna_desc.datain_channel;
-   cna_desc.decompress_addr0 = weights;
+   cna_desc.decompress_addr0 = params->weights_dma;
 
    core_desc.proc_precision = precision_float16;
    core_desc.qd_en = 1;
@@ -297,7 +299,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.out_precision = precision_float32;
    dpu_desc.in_precision = precision_float16;
    dpu_desc.proc_precision = precision_float16;
-   dpu_desc.dst_base_addr = output;
+   dpu_desc.dst_base_addr = params->output_dma;
    dpu_desc.dst_surf_stride = cna_desc.dataout_height * cna_desc.dataout_width;
    dpu_desc.width = core_desc.dataout_width ;
    dpu_desc.height = core_desc.dataout_height;
@@ -326,7 +328,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.channel_wdma = core_desc.dataout_channel;
    dpu_desc.surf_add = dpu_desc.dst_surf_stride * 4;
 
-   gen_matmul_task(task,&cna_desc,&core_desc,&dpu_desc);
+   gen_matmul_task(params->tasks,&cna_desc,&core_desc,&dpu_desc);
 
    return 0;
 }
@@ -340,7 +342,7 @@ int gen_matmul_fp16(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
  * TODO: Fix a) & b)
  *
  **/
-int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t weights, uint32_t output, uint64_t *task) {
+int gen_matmul_int8(matmul_params_t *params) {
 
    npu_cna_desc cna_desc;
    npu_core_desc core_desc;
@@ -356,20 +358,20 @@ int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.proc_precision = precision_int8;
 
    cna_desc.kernel_groups = 0;
-   cna_desc.feature_grains = M+1;
+   cna_desc.feature_grains = params->m+1;
    cna_desc.conv_x_stride = 1;
    cna_desc.conv_y_stride = 1;
 
    cna_desc.datain_width = 1;
-   cna_desc.datain_height = M;
-   cna_desc.datain_channel = K;
+   cna_desc.datain_height = params->m;
+   cna_desc.datain_channel = params->k;
    cna_desc.dataout_width = 1;
-   cna_desc.dataout_height = M;
+   cna_desc.dataout_height = params->m;
    cna_desc.dataout_atomics = cna_desc.dataout_width * cna_desc.dataout_height;
 
    cna_desc.weight_width = 1;
    cna_desc.weight_height = 1;
-   cna_desc.weight_kernels = N;
+   cna_desc.weight_kernels = params->n;
    cna_desc.weight_bytes_per_kernel = cna_desc.weight_width * cna_desc.weight_height *
      cna_desc.datain_channel * sizeof(int8_t);
    cna_desc.weight_bytes = cna_desc.weight_bytes_per_kernel * cna_desc.weight_kernels;
@@ -405,7 +407,7 @@ int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.data_offset = 0x0;
    cna_desc.pad_left = 0;
    cna_desc.pad_top = 0;
-   cna_desc.feature_base_addr = input;
+   cna_desc.feature_base_addr = params->input_dma;
    cna_desc.weight_offset = 0;
    cna_desc.weight_burst_len = 0xf;
    cna_desc.data_burst_len = 0xf;
@@ -416,7 +418,7 @@ int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    cna_desc.dma_width = cna_desc.datain_width;
    cna_desc.dma_height = cna_desc.datain_height;
    cna_desc.dma_channel = cna_desc.datain_channel;
-   cna_desc.decompress_addr0 = weights;
+   cna_desc.decompress_addr0 = params->weights_dma;
 
    core_desc.proc_precision = precision_int8;
    core_desc.qd_en = 1;
@@ -431,7 +433,7 @@ int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.out_precision = precision_int32;
    dpu_desc.in_precision = precision_int8;
    dpu_desc.proc_precision = precision_int8;
-   dpu_desc.dst_base_addr = output;
+   dpu_desc.dst_base_addr = params->output_dma;
    dpu_desc.dst_surf_stride = cna_desc.dataout_height * cna_desc.dataout_width;
    dpu_desc.width = core_desc.dataout_width ;
    dpu_desc.height = core_desc.dataout_height;
@@ -460,7 +462,7 @@ int gen_matmul_int8(uint16_t M, uint16_t K, uint16_t N, uint32_t input, uint32_t
    dpu_desc.channel_wdma = core_desc.dataout_channel;
    dpu_desc.surf_add = dpu_desc.dst_surf_stride * 8;
 
-   gen_matmul_task(task,&cna_desc,&core_desc,&dpu_desc);
+   gen_matmul_task(params->tasks,&cna_desc,&core_desc,&dpu_desc);
 
    return 0;
 }

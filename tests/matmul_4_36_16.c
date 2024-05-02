@@ -114,7 +114,15 @@ int main(int argc, char **argv) {
   // Reset the NPU
   npu_reset(fd);
 
-  ret = gen_matmul_fp16(M,64,N,input_dma,weights_dma,output_dma,(uint64_t *)&npu_regs);
+  matmul_params_t params;
+  params.m = M;
+  params.k = 64;
+  params.n = N;
+  params.input_dma = input_dma;
+  params.weights_dma = weights_dma;
+  params.output_dma = output_dma;
+  params.tasks = (uint64_t *) &npu_regs;
+  ret = gen_matmul_fp16(&params);
   if (ret !=0) {
     printf("gen_matmul_fp16 failed %d\n",ret);
     goto cleanup;
