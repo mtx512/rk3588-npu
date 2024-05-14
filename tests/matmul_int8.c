@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
   }
 
   if ((N<=0) || (N>MAX_N) || ((N%16) != 0)) {
-    printf("N [%d] is out of range or not a mutliple of 32\n",K);
+    printf("N [%d] is out of range or not a mutliple of 32\n",N);
     return -1;
   }
 

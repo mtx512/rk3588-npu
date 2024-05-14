@@ -35,25 +35,34 @@
 #include "rknpu-ioctl.h"
 #include "npu_interface.h"
 #include "npu_matmul.h"
+#include <sys/time.h>
 
 #define MAX_M 384 
-#define MAX_K 4096 
-#define MAX_N 4096 
+#define MAX_K 8192 
+#define MAX_N 8192 
 
   // Test currently runs against kernel 5.10 haven't tested 6.1 kernel.
 
   // matrix A max size
   _Float16 matrixA[(MAX_M*MAX_K)];
 
+
   // matrix B max size
-  _Float16 matrixB[(MAX_N*MAX_K)];
+  _Float16 matrixB[(MAX_N*MAX_K)]; 
+
 
   // matrix C max size
-  float expected_result[MAX_M*MAX_N];
+  _Float16 expected_result[MAX_M*MAX_N];
 
   uint64_t npu_regs[112];
 
-void matmul_fp32(int m, int k, int n, _Float16 *src0 , _Float16 *src1, float* dst) {
+static inline int64_t getCurrentTimeUs() {
+  struct timeval tv;
+  gettimeofday(&tv,NULL);
+  return tv.tv_sec * 1000000 + tv.tv_usec;
+}
+
+void matmul_fp16(int m, int k, int n, _Float16 *src0 , _Float16 *src1, _Float16* dst) {
   for (int i = 0; i < m; i++) {
     for (int j = 0; j < n; j++) {
       float sum = 0;
@@ -78,7 +87,7 @@ int main(int argc, char **argv) {
   int ret=0;
 
   if (argc !=4) {
-    printf("Invalid number of args %d, needs to supply M K N ie matmul_fp16 <M> <K> <N>\n",argc);
+    printf("Invalid number of args %d, needs to supply M K N ie matmul_fp16_fp16 <M> <K> <N>\n",argc);
     return -1; 
   }
 
@@ -96,7 +105,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  if ((N<=0) || (N>MAX_N) || ((N%16) != 0)) {
+  if ((N<=0) || (N>MAX_N) || (((N%16) != 0) && (N!=1))) {
     printf("N [%d] is out of range or not a mutliple of 16\n",N);
     return -1;
   }
@@ -114,15 +123,15 @@ int main(int argc, char **argv) {
 
   uint64_t input_dma, input_obj;
   uint32_t input_handle;
-  void *input = mem_allocate(fd, M*K*sizeof(__fp16), &input_dma, &input_obj, 0, &input_handle);
+  void *input = mem_allocate(fd, M*K*sizeof(_Float16), &input_dma, &input_obj, 0, &input_handle);
 
   uint64_t weights_dma, weights_obj;
   uint32_t weights_handle;
-  void *weights = mem_allocate(fd, N*K*sizeof(__fp16), &weights_dma, &weights_obj, 0, &weights_handle);
+  void *weights = mem_allocate(fd, N*K*sizeof(_Float16), &weights_dma, &weights_obj, 0, &weights_handle);
 
   uint64_t output_dma, output_obj;
   uint32_t output_handle;
-  void *output = mem_allocate(fd, M*N*sizeof(float), &output_dma, &output_obj, 0, &output_handle);
+  void *output = mem_allocate(fd, M*N*sizeof(_Float16), &output_dma, &output_obj, 0, &output_handle);
 
   printf("input dma is %lx, output dma is %lx, weights dma is %lx\n", input_dma, output_dma, weights_dma);
   if ((regcmd == NULL) || (tasks == NULL) || (input == NULL) || (weights == NULL) || (output == NULL)) {
@@ -140,8 +149,8 @@ int main(int argc, char **argv) {
   params.input_dma = input_dma;
   params.weights_dma = weights_dma;
   params.output_dma = output_dma;
-  params.tasks = (uint64_t *) &npu_regs;
-  params.fp32tofp16 = 0;
+  params.tasks = (uint64_t *)&npu_regs;
+  params.fp32tofp16 = 1;
   ret = gen_matmul_fp16(&params);
   if (ret !=0) {
     printf("gen_matmul_fp16 failed %d\n",ret);
@@ -162,7 +171,7 @@ int main(int argc, char **argv) {
 
   memset((void *)input,0,M*K*sizeof(_Float16));
   memset((void *)weights,0,K*N*sizeof(_Float16));
-  memset((void *)output,0,M*N*sizeof(float));
+  memset((void *)output,0,M*N*sizeof(_Float16));
 
   srand(time(NULL));
 
@@ -176,7 +185,7 @@ int main(int argc, char **argv) {
   
   for (int i = 0; i < N*K; i++) {
     matrixB[i] = (int)(10.0*rand_float());
-  }
+ }
 
   _Float16 *weights_fp16 = weights;
    
@@ -185,7 +194,7 @@ int main(int argc, char **argv) {
       weights_fp16[weight_fp16(K,n,k)]= matrixB[((n-1)*K)+(k-1)];
     }
   }
- 
+
   _Float16 *feature_data_fp16 = (_Float16*) input;
 
   for (int m=1;m<=M;m++) {
@@ -194,7 +203,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  matmul_fp32(M,K,N,(_Float16 *)&matrixA, (_Float16 *)&matrixB, (float *)&expected_result);
+  matmul_fp16(M,K,N,(_Float16 *)&matrixA, (_Float16 *)&matrixB, (_Float16 *)&expected_result);
 
   struct rknpu_submit submit = {
     .flags = RKNPU_JOB_PC | RKNPU_JOB_BLOCK | RKNPU_JOB_PINGPONG,
@@ -216,23 +225,30 @@ int main(int argc, char **argv) {
       }, { 1, 0}, {2, 0}, {0,0}, {0,0}
     },
   };
+  uint64_t start_us;
+  uint64_t elapse_us;
+
+  start_us = getCurrentTimeUs();
   ret = ioctl(fd, DRM_IOCTL_RKNPU_SUBMIT, &submit);
+  elapse_us = getCurrentTimeUs() - start_us;
+  printf("Elapse Time = %2fms tps = %.2f\n",elapse_us / 1000.f, 1000.f * 1000.f /elapse_us);
+ 
   printf("RKNPU_SUBMIT returned %d\n", ret);
   if (ret <0) {
     return ret;
   }
 
   printf("=========================================================================================================\n");
-  float *output_data = (float*) output;
+  _Float16 *output_data = (_Float16*) output;
   for (int m=1;m<=M;m++) {
     for (int n=1;n<N;n++) {
-      float actual = output_data[feature_data(N, M, 1, 4, n, m, 1)];
-      float expected = expected_result[((m-1)*N)+(n-1)];
-      int32_t *e, *a;
-      e = (int32_t *)&expected;
-      a = (int32_t *)&actual;
+      _Float16 actual = output_data[feature_data(N, M, 1, 8, n, m, 1)];
+      _Float16 expected = expected_result[((m-1)*N)+(n-1)];
+      int16_t *e, *a;
+      e = (int16_t *)&expected;
+      a = (int16_t *)&actual;
       if (actual != expected) {
-        printf("\nmismatch m:%d n:%d  expected:%6.5f acutal:%6.5f %x %x\n",m,n,expected,actual,*e,*a);
+        printf("\nmismatch m:%d n:%d  expected:%f acutal:%f %x %x\n",m,n,(float)expected,(float)actual,*e,*a);
         ret = -1;
       }
     }
@@ -247,7 +263,7 @@ cleanup:
   munmap(tasks,1024);
   munmap(input,M*K*sizeof(_Float16));
   munmap(weights,N*K*sizeof(_Float16));
-  munmap(output,M*N*sizeof(float));
+  munmap(output,M*N*sizeof(_Float16));
 
   mem_destroy(fd, regcmd_handle, regcmd_obj);
   mem_destroy(fd, tasks_handle, tasks_obj );

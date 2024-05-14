@@ -7,6 +7,7 @@ lib = library('rk3588-npu',lib_src, include_directories : incdir)
 test_matmul_4_36_16  = executable('matmul_4_36_16', 'tests/matmul_4_36_16.c', include_directories : incdir, link_with : lib)
 test('matmul_4x36x16',test_matmul_4_36_16, is_parallel : false)
 
+# Test inputs fp16 and output fp32
 test_matmul_fp16  = executable('matmul_fp16', 'tests/matmul_fp16.c', include_directories : incdir, link_with : lib, link_args : '-lm')
 test('matmul fp16 1x32x16',test_matmul_fp16, is_parallel : false , args : ['1', '32' ,'16'])
 test('matmul fp16 1x64x64',test_matmul_fp16, is_parallel : false , args : ['1', '64' ,'64'])
@@ -23,3 +24,10 @@ test('matmul int8 1x1024x1024',test_matmul_int8, is_parallel : false , args : ['
 test('matmul int8 1x4096x4096',test_matmul_int8, is_parallel : false , args : ['1','4096','4096'])
 # test max feature data for one task
 test('matmul int8 544x544x4096',test_matmul_int8, is_parallel : false , args : ['544','544','4096'])
+
+# Test inputs fp16 and output fp16
+test_matmul_fp16_fp16  = executable('matmul_fp16_fp16', 'tests/matmul_fp16_fp16.c', include_directories : incdir, link_with : lib, link_args : '-lm')
+test('matmul fp16_fp16 1x32x16',test_matmul_fp16_fp16, is_parallel : false , args : ['1', '32' ,'16'])
+test('matmul fp16_fp16 1x768x768',test_matmul_fp16_fp16, is_parallel : false , args : ['1', '768' ,'768'])
+test('matmul fp16_fp16 1x768x2048',test_matmul_fp16_fp16, is_parallel : false , args : ['1', '768' ,'2048'])
+test('matmul fp16_fp16 1x8192x8192',test_matmul_fp16_fp16, is_parallel : false , args : ['1', '8192' ,'8192'])

@@ -207,7 +207,7 @@ void gen_matmul_task(uint64_t *ops, npu_cna_desc *cna_desc, npu_core_desc *core_
  * task memory needs to hold at laest 112 values
  * TODO: Fix a) & b) 
  *
- **/
+ */
 int gen_matmul_fp16(matmul_params_t *params) {
 
    npu_cna_desc cna_desc;
@@ -296,7 +296,7 @@ int gen_matmul_fp16(matmul_params_t *params) {
    dpu_desc.conv_mode = direct_convolution;
    dpu_desc.output_mode = 0x2;
    dpu_desc.flying_mode = 0x0;
-   dpu_desc.out_precision = precision_float32;
+   dpu_desc.out_precision = (params->fp32tofp16==0) ? precision_float32 : precision_float16;
    dpu_desc.in_precision = precision_float16;
    dpu_desc.proc_precision = precision_float16;
    dpu_desc.dst_base_addr = params->output_dma;
@@ -317,16 +317,22 @@ int gen_matmul_fp16(matmul_params_t *params) {
    dpu_desc.ew_lut_bypass =1;
    dpu_desc.ew_op_cvt_bypass =1;
    dpu_desc.ew_relu_bypass=1;
-   dpu_desc.fp32tofp16_en =0;
+   dpu_desc.fp32tofp16_en = params->fp32tofp16 & 0x1;
    dpu_desc.out_cvt_scale =1;
-   dpu_desc.size_e_2 = 3; 
-   dpu_desc.size_e_1 = 3; 
-   dpu_desc.size_e_0 = 3;
+   if (params->fp32tofp16 ==0) {
+     dpu_desc.size_e_2 = 3;
+     dpu_desc.size_e_1 = 3;
+     dpu_desc.size_e_0 = 3;
+   } else {
+     dpu_desc.size_e_2 = 1;
+     dpu_desc.size_e_1 = 1;
+     dpu_desc.size_e_0 = 1;
+   }
    dpu_desc.od_bypass = 1;
    dpu_desc.width_wdma = core_desc.dataout_width;
    dpu_desc.height_wdma = core_desc.dataout_height;
    dpu_desc.channel_wdma = core_desc.dataout_channel;
-   dpu_desc.surf_add = dpu_desc.dst_surf_stride * 4;
+   dpu_desc.surf_add = (!params->fp32tofp16) ? dpu_desc.dst_surf_stride * 4 : dpu_desc.dst_surf_stride * 2;
 
    gen_matmul_task(params->tasks,&cna_desc,&core_desc,&dpu_desc);
 
@@ -341,7 +347,7 @@ int gen_matmul_fp16(matmul_params_t *params) {
  * task memory needs to hold at laest 112 values
  * TODO: Fix a) & b)
  *
- **/
+ */
 int gen_matmul_int8(matmul_params_t *params) {
 
    npu_cna_desc cna_desc;
@@ -421,7 +427,7 @@ int gen_matmul_int8(matmul_params_t *params) {
    cna_desc.decompress_addr0 = params->weights_dma;
 
    core_desc.proc_precision = precision_int8;
-   core_desc.qd_en = 1;
+   core_desc.qd_en = 0;
    core_desc.dataout_height = cna_desc.dataout_height - 1;
    core_desc.dataout_width = cna_desc.dataout_width - 1;
    core_desc.dataout_channel = cna_desc.weight_kernels -1;

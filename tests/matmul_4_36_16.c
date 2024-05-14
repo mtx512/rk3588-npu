@@ -122,6 +122,7 @@ int main(int argc, char **argv) {
   params.weights_dma = weights_dma;
   params.output_dma = output_dma;
   params.tasks = (uint64_t *) &npu_regs;
+  params.fp32tofp16 = 0;
   ret = gen_matmul_fp16(&params);
   if (ret !=0) {
     printf("gen_matmul_fp16 failed %d\n",ret);

@@ -31,6 +31,8 @@ typedef struct {
   uint32_t  output_dma;
 
   uint64_t  *tasks;
+
+  uint8_t   fp32tofp16;
 } matmul_params_t;
 
 int gen_matmul_fp16(matmul_params_t *params);
