@@ -79,7 +79,9 @@ int main(int argc, char **argv) {
 
   int M=4;
   int K=36;
+  int Kb=(K+(32-1))&~(32-1); // round up
   int N=16;
+  int Nb=(N+(16-1))&~(16-1); // round up
   int ret=0;
 
   // Open DRI called "rknpu"
@@ -116,8 +118,8 @@ int main(int argc, char **argv) {
 
   matmul_params_t params;
   params.m = M;
-  params.k = 64;
-  params.n = N;
+  params.k = Kb;
+  params.n = Nb;
   params.input_dma = input_dma;
   params.weights_dma = weights_dma;
   params.output_dma = output_dma;
@@ -130,10 +132,6 @@ int main(int argc, char **argv) {
   }
 
   memcpy((void *)regcmd,(void *)&npu_regs,sizeof(npu_regs));
-
-  memset((void *)input,0,M*64*sizeof(__fp16));
-  memset((void *)weights,0,64*N*sizeof(__fp16));
-  memset((void *)output,0,M*N*sizeof(float));
 
   tasks[0].flags  = 0;
   tasks[0].op_idx = 0;
@@ -149,7 +147,17 @@ int main(int argc, char **argv) {
 
   for(int n=1;n<=N;n++) {
     for(int k=1;k<=K;k++) {
-      weights_fp16[weight_fp16(64,n,k)]= matrixB[((n-1)*K)+(k-1)];
+      weights_fp16[weight_fp16(Kb,n,k)]= matrixB[((n-1)*K)+(k-1)];
+    }
+  }
+  for (int n = 1; n <= N; n++) {
+    for (int k = K + 1; k <= Kb; k++) {
+      weights_fp16[weight_fp16(Kb,n,k)] = 0;
+    }
+  }
+  for (int n = N + 1; n <= Nb; n++) {
+    for (int k = 1; k <= Kb; k++) {
+      weights_fp16[weight_fp16(Kb,n,k)] = 0;
     }
   }
 
@@ -157,7 +165,12 @@ int main(int argc, char **argv) {
 
   for (int m=1;m<=M;m++) {
     for (int k=1;k<=K;k++) {
-      feature_data_fp16[feature_data(64,4,1,8,k,m,1)]= matrixA[((m-1)*K)+(k-1)];
+      feature_data_fp16[feature_data(Kb,4,1,8,k,m,1)]= matrixA[((m-1)*K)+(k-1)];
+    }
+  }
+  for (int m = 1; m <= M; m++) {
+    for (int k = K + 1; k <= Kb; k++) {
+      feature_data_fp16[feature_data(Kb, M, 1, 8, k, m, 1)] = 0;
     }
   }
 
@@ -191,7 +204,7 @@ int main(int argc, char **argv) {
   float *output_data = (float*) output;
   for (int m=1;m<=M;m++) {
     for (int n=1;n<N;n++) {
-      float actual = output_data[feature_data(N, 4, 1, 4, n, m, 1)];
+      float actual = output_data[feature_data(Nb, M, 1, 4, n, m, 1)];
       float expected = expected_result[((m-1)*N)+(n-1)];
       if (actual != expected) {
         printf("\nmismatch m:%d  n:%d  expected:%6.1f acutal:%6.1f\n",m,n,expected,actual);
